@@ -3,6 +3,7 @@ Discord bot for playing Maexchen ('Mia' in English)
 
 ## Disclaimer
 This is a **first very basic version** but it allows you to play the game in a Discord channel.
+**NOTE: Currently updated to include also further games like "who am I" and a quiz - ongoing -**
 
 ## Installation
 * Python version 3.5.3 or above needed
