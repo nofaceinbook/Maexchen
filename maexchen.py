@@ -1,6 +1,9 @@
 import discord
 import random
 from random import shuffle
+import os
+from time import sleep
+## import PyNaCl
 
 info = "The Discord Bot Maexchen is offering commands to roll dices for the known game (Mia in English).\n"
 info += "Type 'r' for rolling the dices. Result is just shown to user who entered the command.\n"
@@ -30,14 +33,37 @@ class Dices:
         return self.value
 
 
+class Sounds:
+    names = ""  # names of sounds (just filenames)
+    files = []  # full file names of sounds for playing in subdir sounds
+
+    def __init__(self):
+        c_path = os.path.join(os.getcwd(), "sounds")
+        for i, f in enumerate(os.listdir(c_path)):
+            self.files.append(os.path.join(c_path, f))
+            self.names += "p{} : {}\n".format(i, f[:f.find('.')])
+            print("Assigned sound files:\n{}".format(self.names))
+        if self.names == "":
+            self.names = "no sounds defined"
+
+
 class WhoAmI:
     filename = "known_persons.txt"
+    status_file = "known_persons_status.txt"  # here are values stored in case re-start is required
+    # remove this file if you want to start from scratch
     unassigned_known_persons = []
     user_assignments = dict()
 
     def __init__(self):
         self.unassigned_known_persons = open(self.filename).read().splitlines()
         print("Read following known persons: {}".format(self.unassigned_known_persons))
+        if os.path.isfile(self.status_file):
+            with open(self.status_file) as f:
+                for line in f:
+                    role, user = line.split('+')
+                    self.user_assignments[user.strip()] = role.strip()
+                    self.unassigned_known_persons.remove(role.strip())
+                    print("{} assigned to: {}".format(role, user))
 
     def who_is(self, message):
         if not message.guild:
@@ -51,22 +77,25 @@ class WhoAmI:
             return "", "Sorry, you need to ask others to find out who you are :face_with_raised_eyebrow:"
         if not member_name:
             return "User name '{}' not found!".format(whois_message[1]), ""
-        if member_name in self.user_assignments:
+        if str(member_name) in self.user_assignments:
             return "{} knows now the role of {}  :smiley:".format(message.author,
                                                                   whois_message[1]), "{} is acting as {}".format(
-                whois_message[1], self.user_assignments[member_name])
+                whois_message[1], self.user_assignments[str(member_name)])
         if not len(self.unassigned_known_persons):
             return "Sorry, {} is playing no role (all roles are assigned)".format(whois_message[1]), ""
         new_role = random.choice(self.unassigned_known_persons)
-        self.user_assignments[member_name] = new_role
+        self.user_assignments[str(member_name)] = new_role
         self.unassigned_known_persons.remove(new_role)
+        with open(self.status_file, 'a') as f:
+            f.write("{} + {}\n".format(new_role, member_name))
         return "{} knows now the role of {}  :smiley:".format(message.author,
                                                               whois_message[1]), "{} is acting as {}".format(
-            whois_message[1], self.user_assignments[member_name])
+            whois_message[1], self.user_assignments[str(member_name)])
 
 
 class Quiz:
     filename = "questions.txt"
+    status_file = "questions_status.txt"  # here are values stored in case re-start is required
     questions = []
     answers = []
     correct_answer_ids = []
@@ -86,34 +115,49 @@ class Quiz:
         print(self.questions)
         print(self.answers)
         print(self.correct_answer_ids)
+        if os.path.isfile(self.status_file):
+            with open(self.status_file) as f:
+                for line in f:
+                    user, cquest, cpoints = line.split('+')
+                    self.user_current_question[user.strip()] = int(cquest.strip())
+                    self.user_current_points[user.strip()] = int(cpoints.strip())
+        print("Users are at questions: {}".format(self.user_current_question))
+        print("Users have points: {}" .format(self.user_current_points))
 
     def get_question(self, message):
-        if message.author not in self.user_current_question:
-            self.user_current_question[message.author] = 0
-            self.user_current_points[message.author] = 0
-        if self.user_current_question[message.author] < 0:  # negative position indicates that current question was not yet read
-            self.user_current_question[message.author] *= -1
-        if self.user_current_question[message.author] >= len(self.questions):
+        if str(message.author) not in self.user_current_question:
+            self.user_current_question[str(message.author)] = 0
+            self.user_current_points[str(message.author)] = 0
+        if self.user_current_question[str(message.author)] < 0:  # negative position indicates that current question was not yet read
+            self.user_current_question[str(message.author)] *= -1
+        if self.user_current_question[str(message.author)] >= len(self.questions):
             return "Du hast das Quiz schon durchgespielt. Aktuell gibt es keine weiteren Fragen."
-        cq = self.user_current_question[message.author]
+        cq = self.user_current_question[str(message.author)]
         quest = self.questions[cq] + '\n'
         for a in range(len(self.answers[cq])):
             quest += "{}: {}\n".format(a + 1, self.answers[cq][a])  # show 1 as first possible answer
         return quest
 
     def give_answer(self, message):
-        if message.author not in self.user_current_question:
+        if str(message.author) not in self.user_current_question:
             return "Soll {} eine Antwort fürs Quizz sein? Dann musst Du Dir aber erst mal mit 'q' die Frage durchlesen.".format(message.content)
-        if self.user_current_question[message.author] < 0:
+        if self.user_current_question[str(message.author)] < 0:
             return "Du musst Dir doch mit 'q' erst mal die neue Frage durchlesen, bevor Du antwortest."
-        if self.user_current_question[message.author] >= len(self.questions):
+        if self.user_current_question[str(message.author)] >= len(self.questions):
             return "Du hast das Quiz schon durchgespielt. Aktuell gibt es keine weiteren Fragen."
-        if int(message.content) == self.correct_answer_ids[self.user_current_question[message.author]]:
-            self.user_current_points[message.author] += 1
-            self.user_current_question[message.author] = -self.user_current_question[message.author] - 1
+        # Okay, now we can log and evaluate the answer
+        if int(message.content) == self.correct_answer_ids[self.user_current_question[str(message.author)]]:
+            self.user_current_question[str(message.author)] = -self.user_current_question[str(message.author)] - 1
+            self.user_current_points[str(message.author)] += 1
+            with open(self.status_file, 'a') as f:
+                f.write("{} + {} + {}\n".format(message.author, self.user_current_question[str(message.author)],
+                                                self.user_current_points[str(message.author)]))
             return "Super. Stimmt genau."
         else:
-            self.user_current_question[message.author] = -self.user_current_question[message.author] - 1
+            self.user_current_question[str(message.author)] = -self.user_current_question[str(message.author)] - 1
+            with open(self.status_file, 'a') as f:
+                f.write("{} + {} + {}\n".format(message.author, self.user_current_question[str(message.author)],
+                                                self.user_current_points[str(message.author)]))
             return "Leider falsch...."
 
     def show_points(self, message):
@@ -133,6 +177,8 @@ client = discord.Client(intents=intents)
 dices = Dices()
 whoami = WhoAmI()
 quiz = Quiz()
+sounds = Sounds()
+vc = None  # voice client of bot when connected to voice channel
 
 
 @client.event
@@ -148,6 +194,7 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    global vc
     print("Received message: {} from user: {}".format(message.content, message.author))
     if message.author == client.user:
         return
@@ -179,6 +226,29 @@ async def on_message(message):
             await message.author.send(response_dm)
         if response_channel:
             await message.channel.send(response_channel)
+
+    if message.content == 'pl':
+        await message.channel.send(sounds.names)
+    if message.content[0] == 'p' and represents_int(message.content[1:]):
+        sound_number = int(message.content[1:])
+        # Gets voice channel of message author
+        author_voice = message.author.voice
+        print("user has voice: {}".format(author_voice))
+        if author_voice is not None:
+            voice_channel = author_voice.channel
+            if not vc or client.user not in voice_channel.members:
+                if vc:
+                    await vc.disconnect()
+                print("Bot is connecting to voice channel: {}".format(voice_channel))
+                vc = await voice_channel.connect()
+            vc.play(discord.FFmpegPCMAudio(executable="D:/Programme/ffmpeg/bin/ffmpeg.exe", source=sounds.files[sound_number]))
+            # Sleep while audio is playing.
+            #while vc.is_playing():
+            #    sleep(.1)
+            #await vc.disconnect()
+        else:
+            await message.channel.send("You need to join an audio channel first ...")
+
 
 
 print("Bot is ready!")
